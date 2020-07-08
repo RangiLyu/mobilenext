@@ -45,10 +45,12 @@ class ConvBNReLU(nn.Sequential):
 
 
 class SandGlass(nn.Module):
-    def __init__(self, inp, oup, stride, expand_ratio, norm_layer=None):
+    def __init__(self, inp, oup, stride, expand_ratio, identity_tensor_multiplier=1.0, norm_layer=None):
         super(SandGlass, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
+        self.use_identity = False if identity_tensor_multiplier==1.0 else True
+        self.identity_tensor_channels = int(round(inp*identity_tensor_multiplier))
 
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -75,16 +77,24 @@ class SandGlass(nn.Module):
         self.conv = nn.Sequential(*layers)
 
     def forward(self, x):
+        out = self.conv(x)
         if self.use_res_connect:
-            return x + self.conv(x)
+            if self.use_identity:
+                identity_tensor= x[:,:self.identity_tensor_channels,:,:] + out[:,:self.identity_tensor_channels,:,:]
+                out = torch.cat([identity_tensor, out[:,self.identity_tensor_channels:,:,:]], dim=1)
+                # out[:,:self.identity_tensor_channels,:,:] += x[:,:self.identity_tensor_channels,:,:]
+            else:
+                out = x + out
+            return out
         else:
-            return self.conv(x)
+            return out
 
 
 class MobileNeXt(nn.Module):
     def __init__(self,
                  num_classes=1000,
                  width_mult=1.0,
+                 identity_tensor_multiplier=1.0,
                  sand_glass_setting=None,
                  round_nearest=8,
                  block=None,
@@ -139,7 +149,7 @@ class MobileNeXt(nn.Module):
             output_channel = _make_divisible(c * width_mult, round_nearest)
             for i in range(b):
                 stride = s if i == 0 else 1
-                features.append(block(input_channel, output_channel, stride, expand_ratio=t, norm_layer=norm_layer))
+                features.append(block(input_channel, output_channel, stride, expand_ratio=t, identity_tensor_multiplier=identity_tensor_multiplier, norm_layer=norm_layer))
                 input_channel = output_channel
 
         # make it nn.Sequential
@@ -176,10 +186,9 @@ class MobileNeXt(nn.Module):
 
 
 if __name__ == "__main__":
-    model = MobileNeXt(num_classes=1000, width_mult=1.0)
+    model = MobileNeXt(num_classes=1000, width_mult=1.0, identity_tensor_multiplier=0.5)
     print(model)
 
     test_data = torch.rand(1, 3, 224, 224)
     test_outputs = model(test_data)
     print(test_outputs.size())
-
