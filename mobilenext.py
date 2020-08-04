@@ -104,6 +104,7 @@ class MobileNeXt(nn.Module):
         Args:
             num_classes (int): Number of classes
             width_mult (float): Width multiplier - adjusts number of channels in each layer by this amount
+            identity_tensor_multiplier(float): Identity tensor multiplier - reduce the number of element-wise additions in each block
             sand_glass_setting: Network structure
             round_nearest (int): Round the number of channels in each layer to be a multiple of this number
             Set to 1 to turn off rounding
@@ -120,7 +121,11 @@ class MobileNeXt(nn.Module):
 
         input_channel = 32
         last_channel = 1280
-        lc = last_channel
+
+        # building first layer
+        input_channel = _make_divisible(input_channel * width_mult, round_nearest)
+        self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
+        features = [ConvBNReLU(3, input_channel, stride=2, norm_layer=norm_layer)]
 
         if sand_glass_setting is None:
             sand_glass_setting = [
@@ -132,7 +137,7 @@ class MobileNeXt(nn.Module):
                 [6, 384, 4, 1],
                 [6, 576, 4, 2],
                 [6, 960, 2, 1],
-                [6, lc, 1, 1],
+                [6, self.last_channel / width_mult, 1, 1],
             ]
 
         # only check the first element, assuming user knows t,c,n,s are required
@@ -140,10 +145,6 @@ class MobileNeXt(nn.Module):
             raise ValueError("sand_glass_setting should be non-empty "
                              "or a 4-element list, got {}".format(sand_glass_setting))
 
-        # building first layer
-        input_channel = _make_divisible(input_channel * width_mult, round_nearest)
-        self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
-        features = [ConvBNReLU(3, input_channel, stride=2, norm_layer=norm_layer)]
         # building sand glass blocks
         for t, c, b, s in sand_glass_setting:
             output_channel = _make_divisible(c * width_mult, round_nearest)
