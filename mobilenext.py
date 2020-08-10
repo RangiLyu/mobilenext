@@ -1,9 +1,14 @@
 """
+non-official PyTorch implementation of MobileNeXt from paper:
+Rethinking Bottleneck Structure for Efficient Mobile Network Design
+https://arxiv.org/abs/2007.02269
+
 modified from mobilenetv2 torchvision implementation
 https://github.com/pytorch/vision/blob/master/torchvision/models/mobilenet.py
 
 """
 
+import math
 import torch
 from torch import nn
 
@@ -55,7 +60,11 @@ class SandGlass(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
 
-        hidden_dim = int(round(inp / expand_ratio))
+        hidden_dim = inp // expand_ratio
+        if hidden_dim < oup /6.:
+            hidden_dim = math.ceil(oup / 6.)
+            hidden_dim = _make_divisible(hidden_dim, 16)
+
         self.use_res_connect = self.stride == 1 and inp == oup
 
         layers = []
@@ -187,7 +196,7 @@ class MobileNeXt(nn.Module):
 
 
 if __name__ == "__main__":
-    model = MobileNeXt(num_classes=1000, width_mult=1.0, identity_tensor_multiplier=0.5)
+    model = MobileNeXt(num_classes=1000, width_mult=1.0, identity_tensor_multiplier=1.0)
     print(model)
 
     test_data = torch.rand(1, 3, 224, 224)
