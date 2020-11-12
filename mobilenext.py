@@ -50,7 +50,7 @@ class ConvBNReLU(nn.Sequential):
 
 
 class SandGlass(nn.Module):
-    def __init__(self, inp, oup, stride, expand_ratio, identity_tensor_multiplier=1.0, norm_layer=None):
+    def __init__(self, inp, oup, stride, expand_ratio, identity_tensor_multiplier=1.0, norm_layer=None, keep_3x3=False):
         super(SandGlass, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
@@ -69,7 +69,8 @@ class SandGlass(nn.Module):
 
         layers = []
         # dw
-        layers.append(ConvBNReLU(inp, inp, kernel_size=3, stride=1, groups=inp, norm_layer=norm_layer))
+        if expand_ratio == 2 or inp==oup or keep_3x3:
+            layers.append(ConvBNReLU(inp, inp, kernel_size=3, stride=1, groups=inp, norm_layer=norm_layer))
         if expand_ratio != 1:
             # pw-linear
             layers.extend([
@@ -79,6 +80,9 @@ class SandGlass(nn.Module):
         layers.extend([
             # pw
             ConvBNReLU(hidden_dim, oup, kernel_size=1, stride=1, groups=1, norm_layer=norm_layer),
+        ])
+        if expand_ratio == 2 or inp==oup or keep_3x3 or stride==2:
+            layers.extend([
             # dw-linear
             nn.Conv2d(oup, oup, kernel_size=3, stride=stride, groups=oup, padding=1, bias=False),
             norm_layer(oup),
@@ -145,7 +149,7 @@ class MobileNeXt(nn.Module):
                 [6, 288, 3, 2],
                 [6, 384, 4, 1],
                 [6, 576, 4, 2],
-                [6, 960, 2, 1],
+                [6, 960, 3, 1],
                 [6, self.last_channel / width_mult, 1, 1],
             ]
 
@@ -159,14 +163,18 @@ class MobileNeXt(nn.Module):
             output_channel = _make_divisible(c * width_mult, round_nearest)
             for i in range(b):
                 stride = s if i == 0 else 1
-                features.append(block(input_channel, output_channel, stride, expand_ratio=t, identity_tensor_multiplier=identity_tensor_multiplier, norm_layer=norm_layer))
+                features.append(block(input_channel, output_channel, stride, expand_ratio=t, 
+                    identity_tensor_multiplier=identity_tensor_multiplier, norm_layer=norm_layer, keep_3x3=(b==1 and s==1 and i==0)))
                 input_channel = output_channel
 
         # make it nn.Sequential
         self.features = nn.Sequential(*features)
 
         # building classifier
-        self.classifier = nn.Linear(self.last_channel, num_classes)
+        self.classifier = nn.Sequential(
+                nn.Dropout(0.2),
+                nn.Linear(self.last_channel, num_classes)
+                )
         
 
         # weight initialization
