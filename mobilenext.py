@@ -149,7 +149,7 @@ class MobileNeXt(nn.Module):
                 [6, 288, 3, 2],
                 [6, 384, 4, 1],
                 [6, 576, 4, 2],
-                [6, 960, 3, 1],
+                [6, 960, 2, 1],
                 [6, self.last_channel / width_mult, 1, 1],
             ]
 
@@ -210,3 +210,12 @@ if __name__ == "__main__":
     test_data = torch.rand(1, 3, 224, 224)
     test_outputs = model(test_data)
     print(test_outputs.size())
+
+        
+    from thop import profile
+    dummy_input = torch.autograd.Variable(torch.randn(1, 3, 224, 224))
+    flops, params = profile(model, inputs=(dummy_input,))
+    print('flops:{}\nparams:{}'.format(flops, params))
+
+    # dummy_input = torch.autograd.Variable(torch.randn(1, 3, 224, 224))
+    # torch.onnx.export(model, dummy_input, r'D:\Projects\mobilenext\mobilenext111.onnx', verbose=True, opset_version=10, keep_initializers_as_inputs=True)
